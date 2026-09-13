@@ -1,0 +1,94 @@
+# =========================
+# Build directories
+# =========================
+build/
+cmake-build-*/
+out/
+bin/
+obj/
+
+# =========================
+# Compiled binaries
+# =========================
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# =========================
+# Debug / profiling artifacts
+# =========================
+*.dSYM/
+*.gcda
+*.gcno
+*.prof
+*.profraw
+*.profdata
+
+# =========================
+# CMake generated files
+# =========================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+compile_commands.json
+install_manifest.txt
+Testing/
+
+# =========================
+# Dataset / local data
+# =========================
+data/
+credit+approval/
+
+# =========================
+# Agent / tool local artifacts
+# =========================
+.opencode/
+.opencode*
+opencode.local.json
+opencode.local.*
+.agents/
+.agent/
+agent-work/
+agent-artifacts/
+
+# =========================
+# Logs / temporary files
+# =========================
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# =========================
+# macOS
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+
+# =========================
+# JetBrains
+# =========================
+.idea/
+
+# =========================
+# OS / IDE temporary files
+# =========================
+*.code-workspace
