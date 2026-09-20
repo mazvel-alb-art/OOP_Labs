@@ -4,6 +4,7 @@
 #include "Column.hpp"
 #include "CategoricalColumn.hpp"
 #include "NumericColumn.hpp"
+#include <vector>
 
 #include <variant> 
 #include <string>
@@ -17,10 +18,11 @@ class Dataset
 
     private:
     std::unordered_map<std::string, Column> columns;
+    std::vector<std::string> column_order;
     public:
     Dataset(const std::string file_way);
     void print_summary();
-
+    void statistics(int x);
 
 };
 
