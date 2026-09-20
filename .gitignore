@@ -92,3 +92,8 @@ agent-artifacts/
 # OS / IDE temporary files
 # =========================
 *.code-workspace
+
+# Local test/build executables
+Lab1
+header_test
+src/Lab1

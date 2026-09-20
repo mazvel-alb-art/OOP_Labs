@@ -6,11 +6,22 @@
 #include "NumericColumn.hpp"
 
 #include <variant> 
+#include <string>
+#include <unordered_map>
+#include <fstream>
+#include <sstream>
+
 
 class Dataset
 {
+
     private:
-    using Column = std::variant<NumericColumn, CategoricalColumn>;
+    std::unordered_map<std::string, Column> columns;
+    public:
+    Dataset(const std::string file_way);
+    void print_summary();
+
+
 };
 
 #endif

@@ -7,4 +7,5 @@
 #include "NumericColumn.hpp"
 
 using Column = std::variant<NumericColumn, CategoricalColumn>;
+
 #endif
