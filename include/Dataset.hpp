@@ -17,10 +17,10 @@ class Dataset
 {
 
     private:
+    bool valid_ = false;
     std::unordered_map<std::string, Column> columns;
     std::vector<std::string> column_order;
 
-    std::vector<std::vector<double>> matrix;
     std::vector<std::string> matrix_columns;
 
     Statistic statistic;
@@ -47,8 +47,16 @@ class Dataset
 
     void preprocess();
 
-
-
+    void save_binary(const std::string& file_name);
+    void load_binary(const std::string& file_name);
+    //tests
+    const std::vector<std::vector<double>>& get_matrix() const;
+    const Column& get_columns(int x) const;
+    std::size_t get_column_count() const {return column_order.size();};
+    static double quantile(const std::vector<double>& sorted, double q);
+    std::size_t get_missing_count(int x) const;
+    const std::vector<std::string>& get_matrix_column_names() const;
+    bool is_valid() const { return valid_; }
 
 };
 

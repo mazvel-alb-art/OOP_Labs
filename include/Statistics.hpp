@@ -1,6 +1,9 @@
 #ifndef STATISTICS_HPP
 #define STATISTICS_HPP
 
+#include <vector>
+#include <cstddef>
+
 
 
 struct  Statistic

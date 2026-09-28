@@ -97,3 +97,6 @@ agent-artifacts/
 Lab1
 header_test
 src/Lab1
+
+# Build artifacts
+build-debug/
