@@ -29,8 +29,8 @@ int main(){
     std::cin >> answer;
 
     if (answer == "yes" || answer == "Yes"){
-        dataset.preprocess();
-        dataset.save_binary("data/binary.bin");
+        Matrix& m = dataset.preprocess();
+        m.save_binary("data/binary.bin");
 
         auto csv_size = std::filesystem::file_size("data/crx.csv");
         auto bin_size = std::filesystem::file_size("data/binary.bin");

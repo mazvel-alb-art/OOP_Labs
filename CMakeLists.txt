@@ -17,6 +17,7 @@ endif()
 # ---------- core library ----------
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/Dataset.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Matrix.cpp"
 )
 
 add_library(core STATIC ${CORE_SOURCES})

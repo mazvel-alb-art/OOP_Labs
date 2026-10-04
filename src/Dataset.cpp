@@ -9,7 +9,8 @@
 #include "Dataset.hpp"
 #include "NumericColumn.hpp"
 #include "CategoricalColumn.hpp"
-#include "Statistics.hpp"
+#include "FeatureInfo.hpp"
+#include "Matrix.hpp"
 
 Dataset::Dataset(const std::string file_way){
     
@@ -35,7 +36,7 @@ Dataset::Dataset(const std::string file_way){
     while (std::getline(line2, buffer, ',')){
         count++;
     }//количество столбцов
-    statistic.column_count = count;
+    row_count_ = count;
 
     line2.clear();
     file.seekg(0);
@@ -158,92 +159,37 @@ Dataset::Dataset(const std::string file_way){
 //print_summary()
 
 void Dataset::print_summary(){
-    std::size_t column_lengh; 
-    std::size_t column_count = columns.size();
-    NumericColumn* x;
-    CategoricalColumn* y;
+    DatasetInfo info = analyze();
 
-    for (auto& column : columns){       //ищем количество колонн и их длину
-        x = std::get_if<NumericColumn>(&column.second);
+    std::cout << "Объектов: " << row_count_ << std::endl;
+    std::cout << "Признаков: " << column_order.size() << std::endl;
+    std::cout << "#   Признак       Тип             Пропуски" << std::endl;
 
-        if (x == nullptr){
-            y = std::get_if<CategoricalColumn>(&column.second);
-            column_lengh = y->values.size();
+    std::size_t all_null_count = 0;
+    std::size_t index = 0;
+
+    for (const auto& key : column_order){
+        const FeatureInfo& fi = info.at(key);
+        std::cout << index << "  " << key << "            ";
+
+        std::size_t missing = 0;
+        if (std::holds_alternative<NumericFeatureInfo>(fi)){
+            std::cout << "Числовой        ";
+            missing = std::get<NumericFeatureInfo>(fi).missing_count;
         }
         else{
-            column_lengh = x->values.size();
-        }
-    }
-
-    std::vector<int> mass(column_count);
-    {
-        int null_count = 0;
-
-        for(std::size_t jindex = 0; jindex < column_count;jindex++){        //ищем количество пропусков для каждого признака
-            auto& column = columns[column_order[jindex]];
-            x = std::get_if<NumericColumn>(&column);
-
-            if (x != nullptr){
-                for (std::size_t i = 0; i < column_lengh;i++){
-                    if (x->values[i].has_value()){
-                        continue;
-                    }
-                    else{
-                        null_count++;
-                    }
-                }
-            }
-            else {
-                y = std::get_if<CategoricalColumn>(&column);
-
-                for (std::size_t i = 0; i < column_lengh;i++){
-                    if (y->values[i].has_value()){
-                        continue;
-                    }
-                    else{
-                        null_count++;
-                    }
-                }
-            }
-
-            mass[jindex] = null_count;
-            jindex++;
-            null_count = 0;
-        }
-    }
-
-    std::cout<<"Объектов: "<<column_lengh<<std::endl;
-    std::cout<<"Признаков: "<<column_count<<std::endl;
-    std::cout<<"#   Признак       Тип             Пропуски"<< std::endl;
-
-    int all_null_count = 0;
-
-    for (std::size_t i = 0;i < column_count;i++){       //подсчёт всех пропусков
-        all_null_count += mass[i];
-    }
-
-    int index = 0;
-
-    for (auto& key : column_order){
-        auto& column = columns[key];
-        std::cout<<index<<"  "<<key<<"            ";
-
-        x = std::get_if<NumericColumn>(&column);
-
-        if (x != nullptr){
-            std::cout<<"Числовой        ";
-        }
-        else{
-            std::cout<<"Категориальный  ";
+            std::cout << "Категориальный  ";
+            missing = std::get<CategoricalFeatureInfo>(fi).missing_count;
         }
 
-        double procent = static_cast<double>(mass[index]) / column_lengh * 100;
-        std::cout<<mass[index]<<" ("<<procent<<"%)"<<std::endl;
-        
+        double procent = static_cast<double>(missing) / row_count_ * 100;
+        std::cout << missing << " (" << procent << "%)" << std::endl;
 
-        index++; 
+        all_null_count += missing;
+        index++;
     }
-    std::cout<<"Всего пропусков: "<<all_null_count<<" в "<<column_count<<" признаках"<<std::endl;
+    std::cout << "Всего пропусков: " << all_null_count
+              << " в " << column_order.size() << " признаках" << std::endl;
 }
 
 
@@ -255,123 +201,67 @@ void Dataset::print_summary(){
 //statistic()
 
 void Dataset::statistics(int x){
-    std::size_t column_count = columns.size();
-
-    NumericColumn* nume;
-    CategoricalColumn* cate;
-
-    int null_count = 0;
-    double min;
-    double max;
-    double mean = 0;
-    double var = 0;
-    double q05 = 0;
-    double q25 = 0;
-    double q50 = 0;
-    double q75 = 0;
-    double q95 = 0;
-
-    int interval1 = 0;
-    int interval2 = 0;
-    int interval3 = 0;
-    int interval4 = 0;
-
-
-
-
-
-    if (x < 0 || static_cast<std::size_t>(x) >= column_count){
+    if (x < 0 || static_cast<std::size_t>(x) >= column_order.size()){
         return;
     }
-    std::string key = column_order[x];
-    auto& column = columns[key];
-    nume = std::get_if<NumericColumn>(&column);
-    if (nume != nullptr){       //если числововй
 
-        null_count = Dataset::null_count(nume);                     //количество пропусков
+    DatasetInfo info = analyze();
+    const std::string& key = column_order[x];
+    const FeatureInfo& fi = info.at(key);
 
-        Dataset::min_max_mean(nume, min, max, mean, null_count);   //минимум, макимум и медиана
+    if (std::holds_alternative<NumericFeatureInfo>(fi)){
+        const auto& n = std::get<NumericFeatureInfo>(fi);
 
-        Dataset::var(nume, var, mean, null_count);                 //дисперсия
+        std::cout << "Признак " << x << ": " << key << " числовой" << std::endl;
+        std::cout << "Пропусков: " << n.missing_count << std::endl;
+        std::cout << "min:   " << n.min << "   max:    " << n.max << std::endl;
+        std::cout << "mean:  " << n.mean << "   var:    " << n.var << std::endl << std::endl;
+        std::cout << "q05:  " << n.q05 << std::endl;
+        std::cout << "q25:  " << n.q25 << std::endl;
+        std::cout << "q50:  " << n.median << std::endl;
+        std::cout << "q75:  " << n.q75 << std::endl;
+        std::cout << "q95:  " << n.q95 << std::endl << std::endl;
 
-        Dataset::q(nume, q05, q25, q50, q75, q95);                 //квантили
+        // гистограмма — как было, через intervals
+        NumericColumn* nume = std::get_if<NumericColumn>(&columns[key]);
+        std::vector<std::size_t> bins;
+        intervals(nume, bins);
 
-        Dataset::intervals(nume, interval1, interval2, interval3, interval4); //интервалы
-
-
-        
-
-        std::cout<<"Признак "<<x<<": "<<key<<" числовой"<<std::endl;
-
-        std::cout<<"Пропусков: "<<null_count<<std::endl;
-
-        std::cout<<"min:   "<<min<<"   max:    "<<max<<std::endl;
-
-        std::cout<<"mean:  "<<mean<<"   var:    "<<var<<std::endl<<std::endl;
-
-        std::cout<<"q05:  "<<q05<<std::endl;
-        std::cout<<"q25:  "<<q25<<std::endl;
-        std::cout<<"q50:  "<<q50<<std::endl;
-        std::cout<<"q75:  "<<q75<<std::endl;
-        std::cout<<"q95:  "<<q95<<std::endl<<std::endl;
-
-        std::cout<<"["<<0<<", "<<"25.0"<<")    ";
-        for (int i = 0; i < interval1 / 10;i++){
-            std::cout<<"#";
-        }
-        std::cout<<"    "<<interval1<<std::endl;
-
-        std::cout<<"["<<"25.0"<<", "<<"50.0"<<")    ";
-        for (int i = 0; i < interval2 / 10;i++){
-            std::cout<<"#";
-        }
-        std::cout<<"    "<<interval2<<std::endl;
-
-        std::cout<<"["<<"50.0"<<", "<<"80.0"<<")    ";
-        for (int i = 0; i < interval3 / 10;i++){
-            std::cout<<"#";
-        }
-        std::cout<<"    "<<interval3<<std::endl;
-
-        std::cout<<"["<<"80.0"<<", "<<"+∞"<<")    ";
-        for (int i = 0; i < interval4 / 10;i++){
-            std::cout<<"#";
-        }
-        std::cout<<"    "<<interval4<<std::endl;
-
-    }
-
-
-
-
-
-
-
-
-
-    else{       //если категориальный
-        cate = std::get_if<CategoricalColumn>(&column);         //Пропуски
-
-        null_count = Dataset::null_count(cate);
-
-
-        std::vector<std::string> category_list;         
-        std::vector<int> periodicity;
-        Dataset::category_list_periodicity(cate, category_list, periodicity);    //Заполнение списка уникальных категорий и частот категорий
-
-
-        std::cout<<"Признак "<<x<<": "<<key<<" категориальный"<<std::endl;
-
-        std::cout<<"Пропусков: "<<null_count<<std::endl;
-
-        for (std::size_t i = 0;i < category_list.size();i++){
-            std::cout<<category_list[i]<<"    ";
-            for (int j = 0;j < (periodicity[i])/10;j++){
-                 std::cout<<"#";
+        // min/max для подписей
+        double mn = 0.0, mx = 0.0;
+        bool start = false;
+        for (std::size_t i = 0; i < row_count_; i++){
+            if (nume->values[i].has_value()){
+                if (!start){ mn = nume->values[i].value(); mx = mn; start = true; }
+                else{
+                    if (nume->values[i].value() < mn) mn = nume->values[i].value();
+                    if (nume->values[i].value() > mx) mx = nume->values[i].value();
+                }
             }
-            std::cout<<"   "<<periodicity[i]<<std::endl;
         }
-                
+        double step = (mx - mn) / static_cast<double>(NUM_BINS);
+        if (step == 0.0) step = 1.0;  // защита от деления на ноль в подписях
+
+        for (std::size_t b = 0; b < NUM_BINS; b++){
+            double lo = mn + step * static_cast<double>(b);
+            double hi = mn + step * static_cast<double>(b + 1);
+            std::cout << "[" << lo << ", " << hi << ")    ";
+            for (std::size_t j = 0; j < bins[b] / 10; j++) std::cout << "#";
+            std::cout << "    " << bins[b] << std::endl;
+        }
+    }
+    else{
+        const auto& c = std::get<CategoricalFeatureInfo>(fi);
+
+        std::cout << "Признак " << x << ": " << key << " категориальный" << std::endl;
+        std::cout << "Пропусков: " << c.missing_count << std::endl;
+
+        for (const auto& cat : c.categories){
+            std::cout << cat << "    ";
+            std::size_t freq = c.frequencies.at(cat);
+            for (std::size_t j = 0; j < freq / 10; j++) std::cout << "#";
+            std::cout << "   " << freq << std::endl;
+        }
     }
 }
 
@@ -416,8 +306,9 @@ bool Dataset::consistency_check(std::ifstream& file, std::string line1, std::str
         return correct;
     }
     else{
-        statistic.column_lenght = max_i - 2;
-        return correct;
+    row_count_ = max_i - 2;
+    return correct;
+
     }    
 }
 
@@ -425,7 +316,7 @@ bool Dataset::consistency_check(std::ifstream& file, std::string line1, std::str
 
 std::size_t Dataset::null_count(NumericColumn* nume){
     std::size_t null_count = 0;
-    for (std::size_t i = 0;i < statistic.column_lenght;i++){
+    for (std::size_t i = 0;i < row_count_;i++){
         if (nume->values[i].has_value()){
             continue;
         }
@@ -440,7 +331,7 @@ std::size_t Dataset::null_count(NumericColumn* nume){
 
 void Dataset::min_max_mean(NumericColumn* nume, double& min, double& max, double& mean, int& null_count){
 bool start = true;
-    for (std::size_t i = 0; i < statistic.column_lenght;i++){
+    for (std::size_t i = 0; i < row_count_;i++){
 
         if (start == true){
             if (nume->values[i].has_value()){
@@ -470,31 +361,31 @@ bool start = true;
             mean += nume->values[i].value();
             }
     }
-    mean = mean/(statistic.column_lenght - null_count);   
+    mean = mean/(row_count_ - null_count);   
 }
 
 //
 
-void Dataset::var(NumericColumn* nume, double& var, double& mean, int& null_count){
-    for (std::size_t i = 0; i < statistic.column_lenght; i++){
+void Dataset::variance(NumericColumn* nume, double& var, double& mean, int& null_count){
+    for (std::size_t i = 0; i < row_count_; i++){
         if (nume->values[i].has_value()){
             var += (nume->values[i].value() - mean) * (nume->values[i].value() - mean);
         }
     }
-    var = var / (statistic.column_lenght - null_count);
+    var = var / (row_count_ - null_count);
 }
 
 //
-
-void Dataset::q(NumericColumn* nume, double& q05, double& q25, double& q50, double& q75, double& q95){
+// todo: сделать функцию более общего вида, без хардкод значений квантилей
+std::vector<double> Dataset::q(NumericColumn* nume, const std::vector<double>& qs){
     std::vector<double> sort;
-    for (std::size_t i = 0;i < statistic.column_lenght ;i++){       //сортировка
-        if(nume->values[i].has_value()){
+    for (std::size_t i = 0; i < row_count_; i++){
+        if (nume->values[i].has_value()){
             sort.push_back(nume->values[i].value());
         }
     }
-    for (std::size_t i = 0; i < sort.size()-1;i++){
-        for (std::size_t j = 0; j < sort.size()-1;j++){
+    for (std::size_t i = 0; i < sort.size()-1; i++){
+        for (std::size_t j = 0; j < sort.size()-1; j++){
             if (sort[j] > sort[j+1]){
                 double buffer = sort[j];
                 sort[j] = sort[j+1];
@@ -503,38 +394,72 @@ void Dataset::q(NumericColumn* nume, double& q05, double& q25, double& q50, doub
         }
     }
 
-    q05 = sort[static_cast<int>(sort.size()*0.05 - 1)];       //квантили
-    q25 = sort[static_cast<int>(sort.size()*0.25 - 1)];
+    std::vector<double> result;
+    result.reserve(qs.size());
 
-    if (sort.size() % 2 == 0){
-        q50 = (sort[static_cast<int>(sort.size()/2 - 1)] + sort[static_cast<int>(sort.size()/2)])/2;
+    for (std::size_t k = 0; k < qs.size(); k++){
+        double q = qs[k];
+        double pos = q * (sort.size() - 1);
+        std::size_t lo = static_cast<std::size_t>(pos);
+        std::size_t hi = lo + 1;
+
+        if (hi >= sort.size()){
+            result.push_back(sort.back());
+        }
+        else{
+            double frac = pos - lo;
+            result.push_back(sort[lo] * (1.0 - frac) + sort[hi] * frac);
+        }
     }
-    else{
-        q50 = sort[static_cast<int>(sort.size()/2)];
-    }
 
-    q75 = sort[static_cast<int>(sort.size()*0.75 - 1)];
-    q95 = sort[static_cast<int>(sort.size()*0.95 - 1)];
-
+    return result;
 }
 
 //
 
-void Dataset::intervals(NumericColumn* nume, int& interval1, int& interval2, int& interval3, int& interval4){
-    for (std::size_t i = 0; i < statistic.column_lenght;i++){
+void Dataset::intervals(NumericColumn* nume, std::vector<std::size_t>& bins){
+    bins.assign(NUM_BINS, 0);
+
+    // находим min и max по значениям
+    double min = 0.0;
+    double max = 0.0;
+    bool start = false;
+    for (std::size_t i = 0; i < row_count_; i++){
         if (nume->values[i].has_value()){
-            if (nume->values[i].value() >= 0 && nume->values[i].value() < 25){
-                interval1++;
+            if (!start){
+                min = nume->values[i].value();
+                max = nume->values[i].value();
+                start = true;
             }
-            if (nume->values[i].value() >= 25 && nume->values[i].value() < 50){
-                interval2++;
+            else{
+                if (nume->values[i].value() < min) min = nume->values[i].value();
+                if (nume->values[i].value() > max) max = nume->values[i].value();
             }
-            if (nume->values[i].value() >= 50 && nume->values[i].value() < 80){
-                interval3++;
-            }
-            if (nume->values[i].value() >= 80 ){
-                interval4++;
-            }
+        }
+    }
+
+    if (!start){
+        return;  // все значения — пропуски
+    }
+
+    double range = max - min;
+    if (range == 0.0){
+        // все значения одинаковы — кладём всё в первый бин
+        bins[0] = 1;
+        for (std::size_t i = 1; i < row_count_; i++){
+            if (nume->values[i].has_value()) bins[0]++;
+        }
+        return;
+    }
+
+    double step = range / static_cast<double>(NUM_BINS);
+
+    for (std::size_t i = 0; i < row_count_; i++){
+        if (nume->values[i].has_value()){
+            double v = nume->values[i].value();
+            std::size_t idx = static_cast<std::size_t>((v - min) / step);
+            if (idx >= NUM_BINS) idx = NUM_BINS - 1;  // max попадает в последний бин
+            bins[idx]++;
         }
     }
 }
@@ -543,7 +468,7 @@ void Dataset::intervals(NumericColumn* nume, int& interval1, int& interval2, int
 
 std::size_t Dataset::null_count(CategoricalColumn* cate){
     std::size_t null_count = 0;
-    for (std::size_t i = 0; i < statistic.column_lenght;i++){
+    for (std::size_t i = 0; i < row_count_;i++){
         if (cate->values[i].has_value()){
             continue;
         }
@@ -558,7 +483,7 @@ std::size_t Dataset::null_count(CategoricalColumn* cate){
 
 void Dataset::category_list_periodicity(CategoricalColumn* cate, std::vector<std::string>& category_list, std::vector<int>& periodicity){
     bool in = false;
-    for (std::size_t i = 0; i < statistic.column_lenght;i++){      //заполнение списка уникальных категорий
+    for (std::size_t i = 0; i < row_count_;i++){      //заполнение списка уникальных категорий
         for (std::size_t j = 0; j < category_list.size();j++){
             if (!cate->values[i].has_value()){
             continue;
@@ -579,7 +504,7 @@ void Dataset::category_list_periodicity(CategoricalColumn* cate, std::vector<std
     periodicity.resize(category_list.size());
     int periodicity_count = 0;
     for (std::size_t i = 0;i < category_list.size();i++){                   //ищем частоты категорий
-        for (std::size_t j = 0;j < statistic.column_lenght;j++){
+        for (std::size_t j = 0;j < row_count_;j++){
             if (!cate->values[j].has_value()){
                 continue;
             }
@@ -593,54 +518,117 @@ void Dataset::category_list_periodicity(CategoricalColumn* cate, std::vector<std
 
 //
 
-void Dataset::q50(){
-    statistic.q50.clear();
+std::vector<double> Dataset::q50()  {
+    std::vector<double> medians(column_order.size(), 0.0);
     NumericColumn* nume;
     double q50;
-    for (std::size_t k = 0; k < statistic.column_count;k++){  
-    std::string key = column_order[k];
-    nume = std::get_if<NumericColumn>(&columns[key]);
-    if (nume != nullptr){      
-    std::vector<double> sort;
-    for (std::size_t i = 0;i < statistic.column_lenght ;i++){       //сортировка
-        if(nume->values[i].has_value()){
-            sort.push_back(nume->values[i].value());
-        }
-    }
-    for (std::size_t i = 0; i < sort.size()-1;i++){
-        for (std::size_t j = 0; j < sort.size()-1;j++){
-            if (sort[j] > sort[j+1]){
-                double buffer = sort[j];
-                sort[j] = sort[j+1];
-                sort[j+1] = buffer;
+    for (std::size_t k = 0; k < column_order.size(); k++){
+        std::string key = column_order[k];
+        nume = std::get_if<NumericColumn>(&columns.at(key));
+        if (nume != nullptr){
+            std::vector<double> sort;
+            for (std::size_t i = 0; i < row_count_; i++){
+                if (nume->values[i].has_value()){
+                    sort.push_back(nume->values[i].value());
+                }
             }
+            for (std::size_t i = 0; i < sort.size()-1; i++){
+                for (std::size_t j = 0; j < sort.size()-1; j++){
+                    if (sort[j] > sort[j+1]){
+                        double buffer = sort[j];
+                        sort[j] = sort[j+1];
+                        sort[j+1] = buffer;
+                    }
+                }
+            }
+            if (sort.size() % 2 == 0){
+                q50 = (sort[static_cast<int>(sort.size()/2 - 1)] + sort[static_cast<int>(sort.size()/2)])/2;
+            }
+            else{
+                q50 = sort[static_cast<int>(sort.size()/2)];
+            }
+            medians[k] = q50;
         }
     }
-
-
-    if (sort.size() % 2 == 0){
-        q50 = (sort[static_cast<int>(sort.size()/2 - 1)] + sort[static_cast<int>(sort.size()/2)])/2;
-    }
-    else{
-        q50 = sort[static_cast<int>(sort.size()/2)];
-    }
-
-
-    statistic.q50.push_back(q50);
-}
-    else{
-        statistic.q50.push_back(0.0);
-    }
-}
+    return medians;
 }
 
+DatasetInfo Dataset::analyze() {
+    DatasetInfo info;
 
-void Dataset::preprocess(){
+    for (const auto& name : column_order){
+        const Column& col = columns.at(name);
+
+        if (std::holds_alternative<NumericColumn>(col)){
+            const auto& num = std::get<NumericColumn>(col);
+            NumericFeatureInfo ni;
+
+            // пропуски
+            for (std::size_t i = 0; i < row_count_; i++){
+                if (!num.values[i].has_value()){
+                    ni.missing_count++;
+                }
+            }
+
+            // min, max, mean
+            double mean = 0.0;
+            int dummy_null = static_cast<int>(ni.missing_count);
+            min_max_mean(const_cast<NumericColumn*>(&num), ni.min, ni.max, mean, dummy_null);
+
+            // variance
+            double var = 0.0;
+            variance(const_cast<NumericColumn*>(&num), var, mean, dummy_null);
+
+            ni.mean = mean;
+            ni.var = var;
+
+            // квантили через существующий q()
+            std::vector<double> qs = {0.05, 0.25, 0.50, 0.75, 0.95};
+            std::vector<double> res = q(const_cast<NumericColumn*>(&num), qs);
+
+            ni.q05 = res[0];
+            ni.q25 = res[1];
+            ni.median = res[2];
+            ni.q75 = res[3];
+            ni.q95 = res[4];
+
+            info[name] = ni;
+        }
+        else{
+            const auto& cat = std::get<CategoricalColumn>(col);
+            CategoricalFeatureInfo ci;
+
+            for (std::size_t i = 0; i < row_count_; i++){
+                if (!cat.values[i].has_value()){
+                    ci.missing_count++;
+                    continue;
+                }
+                const std::string& c = cat.values[i].value();
+
+                bool found = false;
+                for (const auto& existing : ci.categories){
+                    if (existing == c){ found = true; break; }
+                }
+                if (!found){
+                    ci.categories.push_back(c);
+                }
+                ci.frequencies[c]++;
+            }
+
+            info[name] = ci;
+        }
+    }
+    return info;
+}
+
+Matrix& Dataset::preprocess(){
+    matrix_.get_matrix().clear();
+    matrix_.get_matrix_column_names().clear();
     CategoricalColumn* cate;
     NumericColumn* nume;
-    Dataset::q50();
-    std::vector<std::vector<std::string>> category_list(statistic.column_count);
-    for (std::size_t i = 0; i < statistic.column_count;i++){        //подсчёт будующего количества колонн
+    std::vector<double> medians = Dataset::q50();
+    std::vector<std::vector<std::string>> category_list(column_order.size());
+    for (std::size_t i = 0; i < column_order.size();i++){        //подсчёт будующего количества колонн
         std::string key = column_order[i];
         auto& column = columns[key];
         nume = std::get_if<NumericColumn>(&column);
@@ -649,7 +637,7 @@ void Dataset::preprocess(){
         else {
             cate = std::get_if<CategoricalColumn>(&column);
             bool in = false;
-            for (std::size_t j = 0; j < statistic.column_lenght;j++){
+            for (std::size_t j = 0; j < row_count_;j++){
                 if (cate->values[j].has_value()){
                     for (std::size_t  l = 0; l < category_list[i].size();l++){
                         if (cate->values[j].value() == category_list[i][l]){
@@ -682,11 +670,11 @@ void Dataset::preprocess(){
 
 
 
-    matrix.resize(statistic.column_lenght);     
-    std::vector<std::vector<std::variant<std::string, double>>> filled(statistic.column_lenght);
+    matrix_.get_matrix().resize(row_count_);     
+    std::vector<std::vector<std::variant<std::string, double>>> filled(row_count_);
 
-    for (std::size_t i = 0; i < statistic.column_lenght;i++){        //заполнение пропусков
-            for (std::size_t j = 0;j < statistic.column_count;j++){
+    for (std::size_t i = 0; i < row_count_;i++){        //заполнение пропусков
+            for (std::size_t j = 0;j < column_order.size();j++){
                 std::string key = column_order[j];
                 nume = std::get_if<NumericColumn>(&columns[key]);
 
@@ -695,7 +683,7 @@ void Dataset::preprocess(){
                         filled[i].push_back(nume->values[i].value());
                     }
                     else{
-                        filled[i].push_back(statistic.q50[j]);
+                        filled[i].push_back(medians[j]);
                     }
                 }
 
@@ -714,18 +702,18 @@ void Dataset::preprocess(){
             }
     }
 
-    std::vector<double> mass_min(statistic.column_count);
-    std::vector<double> mass_max(statistic.column_count);
+    std::vector<double> mass_min(column_order.size());
+    std::vector<double> mass_max(column_order.size());
 
     {                                   //минимумы и максимумы для каждой колонный
-        for (std::size_t i = 0; i < statistic.column_count;i++){
+        for (std::size_t i = 0; i < column_order.size();i++){
             double min;
             double max;
             bool start = false;
             std::string key = column_order[i];
             nume = std::get_if<NumericColumn>(&columns[key]);
             if (nume != nullptr){
-                for (std::size_t j = 0; j < statistic.column_lenght;j++){
+                for (std::size_t j = 0; j < row_count_;j++){
                     if (nume->values[j].has_value()){
                         if (start == false){
                             min = nume->values[j].value();
@@ -750,74 +738,39 @@ void Dataset::preprocess(){
     }
 
     
-    for (std::size_t i = 0; i < statistic.column_count;i++){                               //масштабирование числовых призанков и кодирование категориальных
+    for (std::size_t i = 0; i < column_order.size();i++){                               //масштабирование числовых призанков и кодирование категориальных
         std::string key = column_order[i];
         nume = std::get_if<NumericColumn>(&columns[key]);
 
         if (nume != nullptr){
-            matrix_column_names.push_back(key);
-            for (std::size_t j = 0; j < statistic.column_lenght;j++){
+            matrix_.get_matrix_column_names().push_back(key);
+            for (std::size_t j = 0; j < row_count_;j++){
                 double scaled = ((std::get<double>(filled[j][i])) - mass_min[i]) / (mass_max[i] - mass_min[i]);
-                matrix[j].push_back(scaled);
+                matrix_.get_matrix()[j].push_back(scaled);
             }
         }
         else{
             for (std::size_t k = 0; k < category_list[i].size();k++){
-                matrix_column_names.push_back(key + "_" + category_list[i][k]);
-                for (std::size_t j = 0; j < statistic.column_lenght; j++){
+                matrix_.get_matrix_column_names().push_back(key + "_" + category_list[i][k]);
+                for (std::size_t j = 0; j < row_count_; j++){
                     if (category_list[i][k] == (std::get<std::string>(filled[j][i]))){
-                        matrix[j].push_back(1);
+                        matrix_.get_matrix()[j].push_back(1);
                     }
                     else{
-                        matrix[j].push_back(0);
+                        matrix_.get_matrix()[j].push_back(0);
                     }
                 }
             }
         }
     }
+
+    return matrix_;
 }
 
 
 
-void Dataset::save_binary(const std::string& file_name){
-    std::ofstream file(file_name, std::ios::binary);
-    if (!file.is_open()){
-        std::cout << "Не удалось открыть файл для записи: " << file_name <<std::endl;
-        return;
-    }
-    std::size_t rows = matrix.size();
-    std::size_t columns1 = matrix[0].size();
-
-    file.write(reinterpret_cast<const char*>(&rows), sizeof(rows));
-    file.write(reinterpret_cast<const char*>(&columns1), sizeof(columns1));
-    for (std::size_t i = 0; i < rows;i++){
-        file.write(reinterpret_cast<const char*>(matrix[i].data()), columns1 * sizeof(double));
-    }
-}
-
-void Dataset::load_binary(const std::string& file_name){
-    std::ifstream file(file_name, std::ios::binary);
-    if (!file.is_open()){
-        std::cout << "Не удалось открыть файл для чтения: " << file_name <<std::endl;
-        return;
-    }
-    std::size_t rows;
-    std::size_t columns1;
-    
-    file.read(reinterpret_cast<char*>(&rows), sizeof(rows));
-    file.read(reinterpret_cast<char*>(&columns1), sizeof(columns1));
-    matrix.resize(rows);
-    for (std::size_t i = 0;i < rows;i++){
-        matrix[i].resize(columns1);
-        file.read(reinterpret_cast<char*>(matrix[i].data()), columns1 * sizeof(double));
-    }
-}
 
 //tests
-
-const std::vector<std::vector<double>>& Dataset::get_matrix() const{
-    return matrix;
-}
 
 //
 
@@ -880,8 +833,3 @@ std::size_t Dataset::get_missing_count(int x) const {
     return null_count;
 }
 
-//
-
-const std::vector<std::string>& Dataset::get_matrix_column_names() const {
-    return matrix_column_names;
-}

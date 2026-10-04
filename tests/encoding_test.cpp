@@ -1,4 +1,5 @@
 #include "Dataset.hpp"
+#include "Matrix.hpp"
 #include <iostream>
 #include <variant>
 #include <string>
@@ -7,10 +8,10 @@
 
 int main(){
     Dataset dataset("data/crx.csv");
-    dataset.preprocess();
+    Matrix& m = dataset.preprocess();
 
-    const auto& matrix = dataset.get_matrix();
-    const auto& names = dataset.get_matrix_column_names();
+    const auto& matrix = m.get_matrix();
+    const auto& names = m.get_matrix_column_names();
 
     // 1) Матрица непустая
     if (matrix.empty()){
@@ -46,13 +47,11 @@ int main(){
     }
 
     // 5) Все значения матрицы лежат в [0, 1]
-    //    (min-max для числовых даёт [0,1], one-hot — 0 или 1)
     for (std::size_t j = 0; j < matrix.size(); j++){
         for (std::size_t k = 0; k < matrix[j].size(); k++){
             double v = matrix[j][k];
             if (v < 0.0 || v > 1.0){
-                std::cout << "One_hot: matrix[" << j << "][" << k
-                          << "] = " << v << " вне [0, 1]" << std::endl;
+                std::cout << "One_hot: matrix[" << j << "][" << k<< "] = " << v << " вне [0, 1]" << std::endl;
                 return 1;
             }
         }
