@@ -14,9 +14,7 @@
 #include <sstream>
 
 
-// todo: предобработанная матрица - отдельная сущность (класс)
-// добавить отдельные хеш мапы со статистиками
-// сделать изменяемое количество бинов в гистограмме 
+
 class Dataset
 {
 
@@ -27,9 +25,10 @@ class Dataset
     std::size_t row_count_ = 0;
     std::size_t NUM_BINS = 8;
 
-
+    std::string target_name_ = "A16";
     Matrix matrix_;
     public:
+    //1
     std::size_t get_row_count() const { return row_count_; }
 
     Dataset(const std::string file_way);
@@ -53,7 +52,7 @@ class Dataset
 
     Matrix& preprocess(); 
 
-
+    const std::string& get_target_name() const { return target_name_; }
     //tests
     const Column& get_columns(int x) const;
     std::size_t get_column_count() const {return column_order.size();};

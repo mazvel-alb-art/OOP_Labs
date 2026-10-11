@@ -18,6 +18,9 @@ endif()
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/Dataset.cpp"
     "${CMAKE_SOURCE_DIR}/src/Matrix.cpp"
+    "${CMAKE_SOURCE_DIR}/src/EuclideanDistance.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ManhattanDistance.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ChebyshevDistance.cpp"
 )
 
 add_library(core STATIC ${CORE_SOURCES})
@@ -37,6 +40,7 @@ set(TESTS
     missing_value_test
     quantile
     consistency_test
+    distance_test
 )
 
 foreach(test_name IN LISTS TESTS)

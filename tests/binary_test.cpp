@@ -5,22 +5,16 @@
 #include <vector>
 #include <string>
 
-bool matrix_equal(
-    const std::vector<std::vector<double>>& original,
-    const std::vector<std::vector<double>>& copy)
-{
-    if (original.size() != copy.size()){
-        return false;
-    }
-    for (std::size_t i = 0; i < original.size(); i++){
-        if (original[i].size() != copy[i].size()){
-            return false;
-        }
-        for (std::size_t j = 0; j < original[i].size(); j++){
-            if (original[i][j] != copy[i][j]){
-                return false;
-            }
-        }
+bool matrix_equal(const Matrix& a, const Matrix& b){
+    if (a.rows() != b.rows()) return false;
+    if (a.cols() != b.cols()) return false;
+
+    const auto& da = a.data();
+    const auto& db = b.data();
+    if (da.size() != db.size()) return false;
+
+    for (std::size_t i = 0; i < da.size(); i++){
+        if (da[i] != db[i]) return false;
     }
     return true;
 }
@@ -28,15 +22,13 @@ bool matrix_equal(
 int main(){
     Dataset dataset("data/crx.csv");
     Matrix& original = dataset.preprocess();
-    const auto original_matrix = original.get_matrix();
 
     original.save_binary("data/binary.bin");
 
     Matrix copy;
     copy.load_binary("data/binary.bin");
-    const auto copy_matrix = copy.get_matrix();
 
-    if (!matrix_equal(original_matrix, copy_matrix)){
+    if (!matrix_equal(original, copy)){
         std::cout << "Binary: Тест провален" << std::endl;
         return 1;
     }

@@ -1,21 +1,18 @@
 #include "Matrix.hpp"
 #include <fstream>
 #include <iostream>
+#include <span>
 
-void Matrix::save_binary(const std::string& file_name)  {
+//1
+void Matrix::save_binary(const std::string& file_name) {
     std::ofstream file(file_name, std::ios::binary);
     if (!file.is_open()){
         std::cout << "Не удалось открыть файл для записи: " << file_name << std::endl;
         return;
     }
-    std::size_t rows = matrix.size();
-    std::size_t columns1 = matrix[0].size();
-
-    file.write(reinterpret_cast<const char*>(&rows), sizeof(rows));
-    file.write(reinterpret_cast<const char*>(&columns1), sizeof(columns1));
-    for (std::size_t i = 0; i < rows; i++){
-        file.write(reinterpret_cast<const char*>(matrix[i].data()), columns1 * sizeof(double));
-    }
+    file.write(reinterpret_cast<const char*>(&rows_), sizeof(rows_));
+    file.write(reinterpret_cast<const char*>(&cols_), sizeof(cols_));
+    file.write(reinterpret_cast<const char*>(data_.data()), data_.size() * sizeof(double));
 }
 
 void Matrix::load_binary(const std::string& file_name){
@@ -24,14 +21,30 @@ void Matrix::load_binary(const std::string& file_name){
         std::cout << "Не удалось открыть файл для чтения: " << file_name << std::endl;
         return;
     }
-    std::size_t rows;
-    std::size_t columns1;
+    file.read(reinterpret_cast<char*>(&rows_), sizeof(rows_));
+    file.read(reinterpret_cast<char*>(&cols_), sizeof(cols_));
+    data_.resize(rows_ * cols_);
+    file.read(reinterpret_cast<char*>(data_.data()), data_.size() * sizeof(double));
+}
+//2
+std::span<const double> Matrix::operator[](std::size_t i) const{
+    return std::span<const double>(data_.data() + i * cols_, cols_);
+}
 
-    file.read(reinterpret_cast<char*>(&rows), sizeof(rows));
-    file.read(reinterpret_cast<char*>(&columns1), sizeof(columns1));
-    matrix.resize(rows);
-    for (std::size_t i = 0; i < rows; i++){
-        matrix[i].resize(columns1);
-        file.read(reinterpret_cast<char*>(matrix[i].data()), columns1 * sizeof(double));
+std::span<double> Matrix::operator[](std::size_t i){
+    return std::span<double>(data_.data() + i * cols_, cols_);
+}
+
+double& Matrix::at(std::size_t i, std::size_t j){
+    if (i >= rows_ || j >= cols_){
+        throw std::out_of_range("Matrix::at: индекс вне границ");
     }
+    return data_[i * cols_ + j];
+}
+
+const double& Matrix::at(std::size_t i, std::size_t j) const {
+    if (i >= rows_ || j >= cols_){
+        throw std::out_of_range("Matrix::at: индекс вне границ");
+    }
+    return data_[i * cols_ + j];
 }

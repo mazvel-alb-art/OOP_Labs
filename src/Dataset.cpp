@@ -246,7 +246,7 @@ void Dataset::statistics(int x){
             double lo = mn + step * static_cast<double>(b);
             double hi = mn + step * static_cast<double>(b + 1);
             std::cout << "[" << lo << ", " << hi << ")    ";
-            for (std::size_t j = 0; j < bins[b] / 10; j++) std::cout << "#";
+            for (std::size_t j = 0; j < bins[b] / 10 + 1; j++) std::cout << "#";
             std::cout << "    " << bins[b] << std::endl;
         }
     }
@@ -376,7 +376,7 @@ void Dataset::variance(NumericColumn* nume, double& var, double& mean, int& null
 }
 
 //
-// todo: сделать функцию более общего вида, без хардкод значений квантилей
+
 std::vector<double> Dataset::q(NumericColumn* nume, const std::vector<double>& qs){
     std::vector<double> sort;
     for (std::size_t i = 0; i < row_count_; i++){
@@ -622,13 +622,15 @@ DatasetInfo Dataset::analyze() {
 }
 
 Matrix& Dataset::preprocess(){
-    matrix_.get_matrix().clear();
     matrix_.get_matrix_column_names().clear();
+    matrix_.data().clear();
+
     CategoricalColumn* cate;
     NumericColumn* nume;
     std::vector<double> medians = Dataset::q50();
     std::vector<std::vector<std::string>> category_list(column_order.size());
-    for (std::size_t i = 0; i < column_order.size();i++){        //подсчёт будующего количества колонн
+
+    for (std::size_t i = 0; i < column_order.size(); i++){
         std::string key = column_order[i];
         auto& column = columns[key];
         nume = std::get_if<NumericColumn>(&column);
@@ -637,83 +639,73 @@ Matrix& Dataset::preprocess(){
         else {
             cate = std::get_if<CategoricalColumn>(&column);
             bool in = false;
-            for (std::size_t j = 0; j < row_count_;j++){
+            for (std::size_t j = 0; j < row_count_; j++){
                 if (cate->values[j].has_value()){
-                    for (std::size_t  l = 0; l < category_list[i].size();l++){
+                    for (std::size_t l = 0; l < category_list[i].size(); l++){
                         if (cate->values[j].value() == category_list[i][l]){
                             in = true;
                         }
                     }
                     if (in == false){
                         category_list[i].push_back(cate->values[j].value());
-            
                     }
                 }
                 else{
-                    for (std::size_t l = 0; l < category_list[i].size();l++){
+                    for (std::size_t l = 0; l < category_list[i].size(); l++){
                         if (category_list[i][l] == "__MISSING__"){
                             in = true;
                         }
-
                     }
                     if (in == false){
-                    category_list[i].push_back("__MISSING__");
+                        category_list[i].push_back("__MISSING__");
+                    }
+                    in = false;
                 }
                 in = false;
-                }
-                in = false;
-            
-
             }
         }
     }
 
-
-
-    matrix_.get_matrix().resize(row_count_);     
+    std::vector<std::vector<double>> result(row_count_);
     std::vector<std::vector<std::variant<std::string, double>>> filled(row_count_);
 
-    for (std::size_t i = 0; i < row_count_;i++){        //заполнение пропусков
-            for (std::size_t j = 0;j < column_order.size();j++){
-                std::string key = column_order[j];
-                nume = std::get_if<NumericColumn>(&columns[key]);
+    for (std::size_t i = 0; i < row_count_; i++){
+        for (std::size_t j = 0; j < column_order.size(); j++){
+            std::string key = column_order[j];
+            nume = std::get_if<NumericColumn>(&columns[key]);
 
-                if (nume != nullptr){       //если колонна числовая
-                    if (nume->values[i].has_value()){
-                        filled[i].push_back(nume->values[i].value());
-                    }
-                    else{
-                        filled[i].push_back(medians[j]);
-                    }
+            if (nume != nullptr){
+                if (nume->values[i].has_value()){
+                    filled[i].push_back(nume->values[i].value());
                 }
-
-            
-        
-
-                else{                       //если колонна категориальная
-                    cate = std::get_if<CategoricalColumn>(&columns[key]);
-                        if (cate->values[i].has_value()){
-                            filled[i].push_back(cate->values[i].value());
-                        }
-                        else{
-                            filled[i].push_back("__MISSING__");
-                        }
+                else{
+                    filled[i].push_back(medians[j]);
                 }
             }
+            else{
+                cate = std::get_if<CategoricalColumn>(&columns[key]);
+                if (cate->values[i].has_value()){
+                    filled[i].push_back(cate->values[i].value());
+                }
+                else{
+                    filled[i].push_back("__MISSING__");
+                }
+            }
+        }
     }
 
     std::vector<double> mass_min(column_order.size());
     std::vector<double> mass_max(column_order.size());
 
-    {                                   //минимумы и максимумы для каждой колонный
-        for (std::size_t i = 0; i < column_order.size();i++){
+    {
+        for (std::size_t i = 0; i < column_order.size(); i++){
             double min;
             double max;
             bool start = false;
             std::string key = column_order[i];
             nume = std::get_if<NumericColumn>(&columns[key]);
             if (nume != nullptr){
-                for (std::size_t j = 0; j < row_count_;j++){
+                for (std::size_t j = 0; j < row_count_; j++){
                     if (nume->values[j].has_value()){
                         if (start == false){
                             min = nume->values[j].value();
@@ -737,30 +729,39 @@ Matrix& Dataset::preprocess(){
         }
     }
 
-    
-    for (std::size_t i = 0; i < column_order.size();i++){                               //масштабирование числовых призанков и кодирование категориальных
+    for (std::size_t i = 0; i < column_order.size(); i++){
         std::string key = column_order[i];
+        if (key == target_name_) continue;
         nume = std::get_if<NumericColumn>(&columns[key]);
 
         if (nume != nullptr){
             matrix_.get_matrix_column_names().push_back(key);
-            for (std::size_t j = 0; j < row_count_;j++){
+            for (std::size_t j = 0; j < row_count_; j++){
                 double scaled = ((std::get<double>(filled[j][i])) - mass_min[i]) / (mass_max[i] - mass_min[i]);
-                matrix_.get_matrix()[j].push_back(scaled);
+                result[j].push_back(scaled);
             }
         }
         else{
-            for (std::size_t k = 0; k < category_list[i].size();k++){
+            for (std::size_t k = 0; k < category_list[i].size(); k++){
                 matrix_.get_matrix_column_names().push_back(key + "_" + category_list[i][k]);
                 for (std::size_t j = 0; j < row_count_; j++){
                     if (category_list[i][k] == (std::get<std::string>(filled[j][i]))){
-                        matrix_.get_matrix()[j].push_back(1);
+                        result[j].push_back(1);
                     }
                     else{
-                        matrix_.get_matrix()[j].push_back(0);
+                        result[j].push_back(0);
                     }
                 }
             }
+        }
+    }
+
+    std::size_t cols = result[0].size();
+    matrix_.set_size(row_count_, cols);
+
+    for (std::size_t i = 0; i < row_count_; i++){
+        for (std::size_t j = 0; j < cols; j++){
+            matrix_.data().push_back(result[i][j]);
         }
     }
 
