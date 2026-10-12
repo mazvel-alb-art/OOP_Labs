@@ -21,7 +21,9 @@ file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/EuclideanDistance.cpp"
     "${CMAKE_SOURCE_DIR}/src/ManhattanDistance.cpp"
     "${CMAKE_SOURCE_DIR}/src/ChebyshevDistance.cpp"
-    "${CMAKE_SOURCE_DIR}/src/KnnBase.cpp"        
+    "${CMAKE_SOURCE_DIR}/src/KnnBase.cpp"
+    "${CMAKE_SOURCE_DIR}/src/KnnRegressor.cpp"
+    "${CMAKE_SOURCE_DIR}/src/KnnClassifier.cpp"
 )
 
 add_library(core STATIC ${CORE_SOURCES})
@@ -30,6 +32,8 @@ target_include_directories(core PUBLIC "${CMAKE_SOURCE_DIR}/include")
 # ---------- console app ----------
 add_executable(Lab1 src/Lab1.cpp)
 target_link_libraries(Lab1 PRIVATE core)
+add_executable(Lab2 src/Lab2.cpp)
+target_link_libraries(Lab2 PRIVATE core)
 
 # ---------- tests ----------
 enable_testing()
@@ -43,6 +47,7 @@ set(TESTS
     consistency_test
     distance_test
     neighbors_test
+    knn_test
 )
 
 foreach(test_name IN LISTS TESTS)

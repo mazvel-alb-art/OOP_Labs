@@ -1,13 +1,14 @@
 #include "KnnBase.hpp"
 #include "Exceptions.hpp"
+#include "IModel.hpp"
 #include <queue>
 #include <algorithm>
 #include <memory>
 #include <utility>
 #include <cstddef>
 
-KnnBase::KnnBase(std::unique_ptr<IDistance> metric, std::size_t k)
-    : metric_(std::move(metric)), k_(k)
+KnnBase::KnnBase(std::unique_ptr<IDistance> metric, std::size_t k, Weighting weighting)
+    : metric_(std::move(metric)), k_(k), weighting_(weighting)
 {
     if (k < 1){
         throw InvalidK("KnnBase: k должно быть >= 1");

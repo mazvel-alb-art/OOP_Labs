@@ -12,6 +12,7 @@
 #include "FeatureInfo.hpp"
 #include "Matrix.hpp"
 
+//1
 Dataset::Dataset(const std::string file_way){
     
     std::ifstream file(file_way);
@@ -833,4 +834,69 @@ std::size_t Dataset::get_missing_count(int x) const {
 
     return null_count;
 }
+//2
 
+std::vector<double> Dataset::get_target_encoded() const {
+    std::vector<double> result;
+    result.reserve(row_count_);
+
+    const Column& col = columns.at(target_name_);
+    const auto& cat = std::get<CategoricalColumn>(col);
+
+    for (std::size_t i = 0; i < row_count_; i++){
+        if (!cat.values[i].has_value()){
+            result.push_back(0.0);       // пропуск → 0.0 (в crx в A16 пропусков нет)
+        }
+        else if (cat.values[i].value() == "+"){
+            result.push_back(1.0);
+        }
+        else {
+            result.push_back(0.0);       // "-" и всё остальное → 0.0
+        }
+    }
+    return result;
+}
+
+Split Dataset::train_test_split(double ratio) const {
+    if (ratio <= 0.0 || ratio >= 1.0){
+        throw std::invalid_argument("Dataset::train_test_split: ratio должен быть в (0, 1)");
+    }
+
+    std::size_t n = row_count_;
+    std::size_t n_train = static_cast<std::size_t>(static_cast<double>(n) * ratio);
+
+    if (n_train == 0 || n_train >= n){
+        throw std::invalid_argument("Dataset::train_test_split: разбиение даёт пустую часть");
+    }
+
+    std::vector<double> target = get_target_encoded();
+
+    Split result;
+
+    // ---- train ----
+    result.train_X.set_size(n_train, matrix_.cols());
+    result.train_X.data().reserve(n_train * matrix_.cols());
+    result.train_y.reserve(n_train);
+
+    for (std::size_t i = 0; i < n_train; i++){
+        for (std::size_t j = 0; j < matrix_.cols(); j++){
+            result.train_X.data().push_back(matrix_.at(i, j));
+        }
+        result.train_y.push_back(target[i]);
+    }
+
+    // ---- test ----
+    std::size_t n_test = n - n_train;
+    result.test_X.set_size(n_test, matrix_.cols());
+    result.test_X.data().reserve(n_test * matrix_.cols());
+    result.test_y.reserve(n_test);
+
+    for (std::size_t i = n_train; i < n; i++){
+        for (std::size_t j = 0; j < matrix_.cols(); j++){
+            result.test_X.data().push_back(matrix_.at(i, j));
+        }
+        result.test_y.push_back(target[i]);
+    }
+
+    return result;
+}

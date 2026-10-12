@@ -1,4 +1,4 @@
-#include "KnnBase.hpp"
+#include "KnnRegressor.hpp"
 #include "EuclideanDistance.hpp"
 #include "ManhattanDistance.hpp"
 #include "Exceptions.hpp"
@@ -46,13 +46,13 @@ int main(){
     std::span<const double> query = m[0];
 
     // ============================================================
-    // ТЕСТ 1: kNN с k=3 и евклидовой метрикой — сравнение с полной сортировкой
+    // ТЕСТ 1: k=3, евклидова метрика — сравнение с полной сортировкой
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        EuclideanDistance ref_metric;                       // отдельный экземпляр для full_sort
+        EuclideanDistance ref_metric;
 
-        KnnBase knn(std::move(metric), 3);
+        KnnRegressor knn(std::move(metric), 3, Weighting::Uniform);
         knn.fit(m, target_span);
 
         auto res = knn.find_neighbors(query, 3);
@@ -76,13 +76,13 @@ int main(){
     }
 
     // ============================================================
-    // ТЕСТ 2: другая метрика (манхэттенская) — сравнение с полной сортировкой
+    // ТЕСТ 2: k=2, манхэттенская метрика — сравнение с полной сортировкой
     // ============================================================
     {
         auto metric = std::make_unique<ManhattanDistance>();
         ManhattanDistance ref_metric;
 
-        KnnBase knn(std::move(metric), 2);
+        KnnRegressor knn(std::move(metric), 2, Weighting::Uniform);
         knn.fit(m, target_span);
 
         auto res = knn.find_neighbors(query, 2);
@@ -105,7 +105,7 @@ int main(){
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        KnnBase knn(std::move(metric), 5);
+        KnnRegressor knn(std::move(metric), 5, Weighting::Uniform);
         knn.fit(m, target_span);
 
         auto res = knn.find_neighbors(query, 5);
@@ -113,7 +113,6 @@ int main(){
             std::cout << "Neighbors: k=5 вернул " << res.size() << " элементов\n";
             return 1;
         }
-        // При запросе = строка 0, ожидаемый порядок: 0, 1, 2, 3, 4
         for (std::size_t i = 0; i < 5; i++){
             if (res[i].second != i){
                 std::cout << "Neighbors: порядок при k=5 нарушен на " << i << "\n";
@@ -127,7 +126,7 @@ int main(){
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        KnnBase knn(std::move(metric), 1);
+        KnnRegressor knn(std::move(metric), 1, Weighting::Uniform);
         knn.fit(m, target_span);
 
         try {
@@ -143,7 +142,7 @@ int main(){
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        KnnBase knn(std::move(metric), 1);
+        KnnRegressor knn(std::move(metric), 1, Weighting::Uniform);
         knn.fit(m, target_span);
 
         try {
@@ -159,7 +158,7 @@ int main(){
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        KnnBase knn(std::move(metric), 3);
+        KnnRegressor knn(std::move(metric), 3, Weighting::Uniform);
 
         try {
             knn.find_neighbors(query, 3);
@@ -174,7 +173,7 @@ int main(){
     // ============================================================
     {
         auto metric = std::make_unique<EuclideanDistance>();
-        KnnBase knn(std::move(metric), 3);
+        KnnRegressor knn(std::move(metric), 3, Weighting::Uniform);
         knn.fit(m, target_span);
 
         std::vector<double> bad_query = {1.0, 2.0, 3.0};    // 3 != 2
