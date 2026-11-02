@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['is_5fvalid_0',['is_valid',['../class_dataset.html#a1446345f5515ddfb758b511dab557d7c',1,'Dataset']]]
+  ['has_5fsplit_0',['has_split',['../class_decision_stump.html#a7bdd64aa2e47a796f2cd34abba9bf6f1',1,'DecisionStump']]]
 ];

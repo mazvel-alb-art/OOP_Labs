@@ -1,7 +1,4 @@
 var searchData=
 [
-  ['idistance_0',['IDistance',['../class_i_distance.html',1,'']]],
-  ['imodel_1',['IModel',['../class_i_model.html',1,'']]],
-  ['invalidk_2',['InvalidK',['../class_invalid_k.html',1,'']]],
-  ['is_5fvalid_3',['is_valid',['../class_dataset.html#a1446345f5515ddfb758b511dab557d7c',1,'Dataset']]]
+  ['has_5fsplit_0',['has_split',['../class_decision_stump.html#a7bdd64aa2e47a796f2cd34abba9bf6f1',1,'DecisionStump']]]
 ];
