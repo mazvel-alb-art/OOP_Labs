@@ -23,10 +23,9 @@ enum class SplitCriterion { Variance, Gini };
  * - для регрессии — среднее отклика в части;
  * - для классификации — самый частый класс.
  *
- * Обучение — перебор всех (j, t) с инкрементальным обновлением
- * агрегатов за O(1). Сложность O(d * n log n), память O(n).
+ * Поиск порога выполняется через SplitFinder.
  */
-class DecisionStump : public IModel{
+class DecisionStump : public IModel {
 private:
     SplitCriterion criterion_;
     std::size_t min_samples_leaf_;
@@ -39,20 +38,6 @@ private:
     double split_threshold_ = 0.0;
     double left_value_ = 0.0;
     double right_value_ = 0.0;
-
-    /**
-     * @brief Обучение для регрессии (критерий Variance).
-     * @param features Матрица признаков.
-     * @param target Вектор числовых откликов.
-     */
-    void fit_variance(const Matrix& features, std::span<const double> target);
-
-    /**
-     * @brief Обучение для классификации (критерий Gini).
-     * @param features Матрица признаков.
-     * @param target Вектор числовых кодов классов.
-     */
-    void fit_gini(const Matrix& features, std::span<const double> target);
 
 public:
     /**
@@ -82,30 +67,20 @@ public:
      */
     std::vector<double> predict(const Matrix& features) const override;
 
-    /**
-     * @brief Номер выбранного признака (j).
-     */
-    std::size_t split_feature() const{return split_feature_;}
+    /** @brief Номер выбранного признака (j). */
+    std::size_t split_feature() const { return split_feature_; }
 
-    /**
-     * @brief Выбранный порог (t).
-     */
-    double split_threshold() const{return split_threshold_;}
+    /** @brief Выбранный порог (t). */
+    double split_threshold() const { return split_threshold_; }
 
-    /**
-     * @brief Константа левой части.
-     */
-    double left_value() const{return left_value_;}
+    /** @brief Константа левой части. */
+    double left_value() const { return left_value_; }
 
-    /**
-     * @brief Константа правой части.
-     */
-    double right_value() const{return right_value_;}
+    /** @brief Константа правой части. */
+    double right_value() const { return right_value_; }
 
-    /**
-     * @brief Был ли найден валидный порог при fit.
-     */
-    bool has_split() const{return has_split_;}
+    /** @brief Был ли найден валидный порог при fit. */
+    bool has_split() const { return has_split_; }
 };
 
 #endif

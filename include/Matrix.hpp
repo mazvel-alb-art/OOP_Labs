@@ -1,17 +1,25 @@
 #ifndef MATRIX_HPP
 #define MATRIX_HPP
 
+#include "MatrixSlice.hpp"
+
 #include <vector>
 #include <string>
 #include <cstddef>
 #include <span>
+#include <optional>
 
 /**
- * @brief Плотная числовая матрица с плоским хранением данных (RowMajor).
+ * @brief Порядок хранения элементов матрицы.
+ */
+enum class MatrixLayout { RowMajor, ColumnMajor };
+
+/**
+ * @brief Плотная числовая матрица с плоским хранением данных.
  *
- * Данные лежат в одном непрерывном std::vector<double>. Строка i —
- * это подотрезок [i*cols_, (i+1)*cols_). Это позволяет возвращать
- * std::span на строку без копирования.
+ * Данные лежат в одном непрерывном `std::vector<double>`. Поддерживаются
+ * оба порядка хранения (RowMajor и ColumnMajor). Через `operator()` можно
+ * получать как отдельные элементы, так и срезы строк/столбцов.
  */
 class Matrix
 {
@@ -20,18 +28,15 @@ private:
     std::size_t rows_ = 0;
     std::size_t cols_ = 0;
     std::vector<std::string> matrix_column_names;
+    MatrixLayout layout_ = MatrixLayout::RowMajor;
 
 public:
     Matrix() = default;
 
-    /**
-     * @brief Число строк матрицы.
-     */
+    /** @brief Число строк матрицы. */
     std::size_t rows() const { return rows_; }
 
-    /**
-     * @brief Число столбцов матрицы.
-     */
+    /** @brief Число столбцов матрицы. */
     std::size_t cols() const { return cols_; }
 
     /**
@@ -47,31 +52,21 @@ public:
         cols_ = cols;
     }
 
-    /**
-     * @brief Доступ к внутреннему массиву данных (для записи).
-     */
+    /** @brief Доступ к внутреннему массиву данных (для записи). */
     std::vector<double>&       data()       { return data_; }
 
-    /**
-     * @brief Доступ к внутреннему массиву данных (для чтения).
-     */
+    /** @brief Доступ к внутреннему массиву данных (для чтения). */
     const std::vector<double>& data() const { return data_; }
 
-    /**
-     * @brief Имена столбцов (для one-hot — составные, например A4_u).
-     */
+    /** @brief Имена столбцов (для записи). */
     std::vector<std::string>&       get_matrix_column_names()       { return matrix_column_names; }
 
-    /**
-     * @brief Имена столбцов (только чтение).
-     */
+    /** @brief Имена столбцов (только чтение). */
     const std::vector<std::string>& get_matrix_column_names() const { return matrix_column_names; }
 
     /**
      * @brief Сохраняет матрицу в бинарный файл.
      * @param file_name Путь к файлу.
-     *
-     * Формат: [rows:size_t][cols:size_t][data:double * rows*cols].
      */
     void save_binary(const std::string& file_name);
 
@@ -84,32 +79,76 @@ public:
     /**
      * @brief Доступ к строке i без копирования (только чтение).
      * @param i Индекс строки.
-     * @return std::span на строку длины cols_.
-     *
-     * Границы не проверяет. Для проверяемого доступа — at().
+     * @throw NonContiguousSliceError Если строка неплотная (ColumnMajor и cols > 1).
      */
     std::span<const double> operator[](std::size_t i) const;
 
     /**
      * @brief Доступ к строке i без копирования (чтение и запись).
      * @param i Индекс строки.
-     * @return std::span на строку длины cols_.
+     * @throw NonContiguousSliceError Если строка неплотная (ColumnMajor и cols > 1).
      */
     std::span<double> operator[](std::size_t i);
 
     /**
      * @brief Проверяемый доступ к элементу (i, j).
-     * @param i Индекс строки.
-     * @param j Индекс столбца.
-     * @return Ссылка на элемент.
      * @throw std::out_of_range Если i или j вне границ.
      */
     double& at(std::size_t i, std::size_t j);
 
     /**
      * @brief Проверяемый доступ к элементу (i, j), только чтение.
+     * @throw std::out_of_range Если i или j вне границ.
      */
     const double& at(std::size_t i, std::size_t j) const;
+
+    /** @brief Установить порядок хранения. */
+    void set_layout(MatrixLayout layout) { layout_ = layout; }
+
+    /** @brief Текущий порядок хранения. */
+    MatrixLayout layout() const { return layout_; }
+
+    /**
+     * @brief Доступ к элементу (row, col) по ссылке (lvalue).
+     */
+    double& operator()(std::size_t row, std::size_t col) &;
+    /**
+     * @brief Доступ к элементу (row, col) по константной ссылке (lvalue).
+     */
+    const double& operator()(std::size_t row, std::size_t col) const &;
+
+    /** @brief Запрет доступа к элементу у временной матрицы. */
+    double& operator()(std::size_t row, std::size_t col) && = delete;
+    /** @brief Запрет доступа к элементу у временной константной матрицы. */
+    const double& operator()(std::size_t row, std::size_t col) const && = delete;
+
+    /**
+     * @brief Срез строки (lvalue).
+     */
+    MatrixSlice<double> operator()(std::size_t row, std::nullopt_t) &;
+    /**
+     * @brief Срез строки (константный lvalue).
+     */
+    MatrixSlice<const double> operator()(std::size_t row, std::nullopt_t) const &;
+
+    /** @brief Запрет среза строки у временной матрицы. */
+    MatrixSlice<double> operator()(std::size_t row, std::nullopt_t) && = delete;
+    /** @brief Запрет среза строки у временной константной матрицы. */
+    MatrixSlice<const double> operator()(std::size_t row, std::nullopt_t) const && = delete;
+
+    /**
+     * @brief Срез столбца (lvalue).
+     */
+    MatrixSlice<double> operator()(std::nullopt_t, std::size_t col) &;
+    /**
+     * @brief Срез столбца (константный lvalue).
+     */
+    MatrixSlice<const double> operator()(std::nullopt_t, std::size_t col) const &;
+
+    /** @brief Запрет среза столбца у временной матрицы. */
+    MatrixSlice<double> operator()(std::nullopt_t, std::size_t col) && = delete;
+    /** @brief Запрет среза столбца у временной константной матрицы. */
+    MatrixSlice<const double> operator()(std::nullopt_t, std::size_t col) const && = delete;
 };
 
 #endif

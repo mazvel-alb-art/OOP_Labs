@@ -5,10 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ---------- warnings ----------
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-# ---------- sanitizers (только Debug) ----------
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
     add_link_options(-fsanitize=address,undefined)
@@ -19,6 +17,9 @@ add_library(core STATIC
     src/Dataset.cpp
     src/Matrix.cpp
     src/DecisionStump.cpp
+    src/SplitFinder.cpp
+    src/CartRegressor.cpp
+    src/CartClassifier.cpp
 )
 target_include_directories(core PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
@@ -28,6 +29,9 @@ target_link_libraries(Lab1 PRIVATE core)
 
 add_executable(Lab2_star src/Lab2.cpp)
 target_link_libraries(Lab2_star PRIVATE core)
+
+add_executable(Lab3 src/Lab3.cpp)
+target_link_libraries(Lab3 PRIVATE core)
 
 # ---------- tests ----------
 enable_testing()
@@ -40,6 +44,10 @@ set(TESTS
     quantile
     consistency_test
     stump_test
+    matrix_slice_test
+    split_finder_test
+    cart_regressor_test
+    cart_classifier_test
 )
 
 foreach(test_name IN LISTS TESTS)

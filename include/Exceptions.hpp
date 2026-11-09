@@ -54,4 +54,13 @@ class NotFitted : public std::runtime_error
         : std::runtime_error(msg) {}
 };
 
+/**
+ * @brief Попытка получить span из неплотного среза.
+ */
+class NonContiguousSliceError : public std::logic_error {
+public:
+    explicit NonContiguousSliceError(const std::string& msg)
+        : std::logic_error(msg) {}
+};
+
 #endif
