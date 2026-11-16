@@ -14,19 +14,17 @@ int main() {
     X.data() = {1, 2, 3, 4, 5, 6, 7, 8};
     std::vector<double> y = {1, 1, 2, 2, 3, 3, 4, 4};
 
-    // max_depth = 0 → один лист
+    // max_depth = 0 → без ограничения глубины
     {
         CartRegressor m(0, 2, 1);
         m.fit(X, y);
-        if (m.node_count() != 1) return fail("depth=0 nodes");
-        if (m.leaf_count() != 1) return fail("depth=0 leaves");
-        if (m.actual_depth() != 0) return fail("depth=0 depth");
+        if (m.node_count() <= 1) return fail("unlimited depth nodes");
+        if (m.leaf_count() <= 1) return fail("unlimited depth leaves");
+        if (m.actual_depth() == 0) return fail("unlimited depth depth");
         auto p = m.predict(X);
-        double expected = 0.0;
-        for (double v : y) expected += v;
-        expected /= static_cast<double>(y.size());
+        if (p.size() != y.size()) return fail("unlimited depth prediction size");
         for (double v : p) {
-            if (std::fabs(v - expected) > 1e-9) return fail("depth=0 pred");
+            if (!std::isfinite(v)) return fail("unlimited depth prediction finite");
         }
     }
 

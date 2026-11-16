@@ -20,6 +20,8 @@ add_library(core STATIC
     src/SplitFinder.cpp
     src/CartRegressor.cpp
     src/CartClassifier.cpp
+    src/RandomForestRegressor.cpp
+    src/RandomForestClassifier.cpp
 )
 target_include_directories(core PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
@@ -32,6 +34,9 @@ target_link_libraries(Lab2_star PRIVATE core)
 
 add_executable(Lab3 src/Lab3.cpp)
 target_link_libraries(Lab3 PRIVATE core)
+
+add_executable(Lab4 src/Lab4.cpp)
+target_link_libraries(Lab4 PRIVATE core)
 
 # ---------- tests ----------
 enable_testing()
@@ -48,6 +53,8 @@ set(TESTS
     split_finder_test
     cart_regressor_test
     cart_classifier_test
+    random_forest_test
+    split_weights_test
 )
 
 foreach(test_name IN LISTS TESTS)

@@ -2,10 +2,15 @@
 #include "Exceptions.hpp"
 #include "Matrix.hpp"
 #include "SplitFinder.hpp"
+#include "MaxFeatures.hpp"
 #include <memory>
 #include <numeric>
 #include <vector>
 #include <set>
+#include <cmath>
+#include <random>
+#include <optional>
+#include <stdexcept>
 #include <algorithm>
 
 namespace {
@@ -43,8 +48,8 @@ std::size_t CartClassifier::actual_depth() const {
     return tree_depth(root_.get());
 }
 
-CartClassifier::CartClassifier(std::size_t max_depth, std::size_t min_samples_split, std::size_t min_samples_leaf)
-    : max_depth_(max_depth), min_samples_split_(min_samples_split), min_samples_leaf_(min_samples_leaf){
+CartClassifier::CartClassifier(std::size_t max_depth, std::size_t min_samples_split, std::size_t min_samples_leaf, MaxFeatures max_features, std::uint32_t random_state)
+    : max_depth_(max_depth), min_samples_split_(min_samples_split), min_samples_leaf_(min_samples_leaf), max_features_(max_features), random_state_(random_state){
         if (min_samples_split_ < 2){
             throw std::invalid_argument("CartRegressor: min_samples_split must be >= 2");
         }
@@ -54,6 +59,11 @@ CartClassifier::CartClassifier(std::size_t max_depth, std::size_t min_samples_sp
     }
 //
 void CartClassifier::fit(const Matrix& X, std::span<const double> y){
+    std::vector<std::size_t> counts(y.size(), 1);
+    fit_with_counts(X, y, counts);
+}
+//
+void CartClassifier::fit_with_counts(const Matrix& X, std::span<const double> y, std::span<const std::size_t> counts){
     if (X.rows() == 0) {
         throw EmptyTrainingSet("CartRegressor::fit: empty training set");
     }
@@ -63,22 +73,45 @@ void CartClassifier::fit(const Matrix& X, std::span<const double> y){
     if (X.cols() == 0) {
         throw DimensionMismatch("CartRegressor::fit: X.cols() == 0");
     }
+    if (counts.size() != y.size()){
+        throw DimensionMismatch("CartClassifier::fit_with_counts: counts.size() != y.size()");
+    }
+    bool empty = true;
+    for (std::size_t i = 0; i < counts.size();i++){
+        if (counts[i] != 0){
+            empty = false;
+            break;
+        }
+    }
+    if (empty){
+        throw EmptyTrainingSet("CartRegressor::fit_with_counts: all counts are zero");
+    }
+    if (max_features_.mode == MaxFeaturesMode::Count && (max_features_.count == 0 || max_features_.count > X.cols())){
+        throw std::invalid_argument("CartRegressor: invalid max_features count");
+    }
     std::set<double> uniq;
     for (std::size_t i = 0; i < y.size();i++){
-        uniq.insert(y[i]);
+        if (counts[i] > 0){
+            uniq.insert(y[i]);
+        }
     }
     classes_.clear();
     for (double v : uniq) {
     classes_.push_back(v);
     }
-    std::vector<std::size_t> object_ids(X.rows());
-    std::iota(object_ids.begin(), object_ids.end(), 0);
-    root_ = build_node(X, y, object_ids, 0);
+    std::vector<std::size_t> object_ids;
+    for (std::size_t i = 0; i < y.size(); i++){
+        if (counts[i] != 0){
+            object_ids.push_back(i);
+        }
+    }
+    std::mt19937 rng(random_state_);
+    root_ = build_node(X, y, object_ids, 0, counts, rng);
     num_features_ = X.cols();
     fitted_ = true;
 }
-
-std::unique_ptr<CartClassifierNode> CartClassifier::make_leaf(std::span<const double> y, const std::vector<std::size_t>& object_ids) const{
+//
+std::unique_ptr<CartClassifierNode> CartClassifier::make_leaf(std::span<const double> y, const std::vector<std::size_t>& object_ids, std::span<const std::size_t> counts) const{
     auto leaf = std::make_unique<CartClassifierNode>();
     leaf->is_leaf = true;
     leaf->probabilities.assign(classes_.size(), 0.0);
@@ -86,21 +119,24 @@ std::unique_ptr<CartClassifierNode> CartClassifier::make_leaf(std::span<const do
     for (std::size_t idx : object_ids){
         for (std::size_t j = 0; j < classes_.size(); ++j){
             if (y[idx] == classes_[j]){
-                leaf->probabilities[j]++;
+                leaf->probabilities[j] += counts[idx];
             }
         }
     }
-    double total = static_cast<double>(object_ids.size());
+    double total = 0.0;
+    for (std::size_t idx : object_ids){
+        total += counts[idx];
+    }
     for (auto& p : leaf->probabilities) p /= total;
     return leaf;
 }
 
-std::unique_ptr<CartClassifierNode> CartClassifier::build_node(const Matrix& X, std::span<const double> y, const std::vector<std::size_t>& object_ids, std::size_t depth){
-    if (depth >= max_depth_){
-        return make_leaf(y, object_ids);
+std::unique_ptr<CartClassifierNode> CartClassifier::build_node(const Matrix& X, std::span<const double> y, const std::vector<std::size_t>& object_ids, std::size_t depth, std::span<const std::size_t> counts, std::mt19937& rng){
+    if (max_depth_ != 0 && depth >= max_depth_){
+        return make_leaf(y, object_ids, counts);
     }
     if (object_ids.size() < min_samples_split_){
-        return make_leaf(y, object_ids);
+        return make_leaf(y, object_ids, counts);
     }
     bool all_same = true;
     for (std::size_t idx : object_ids){
@@ -110,21 +146,58 @@ std::unique_ptr<CartClassifierNode> CartClassifier::build_node(const Matrix& X, 
         }
     }
     if (all_same == true){
-        return make_leaf(y, object_ids);
+        return make_leaf(y, object_ids, counts);
     }
     std::vector<std::size_t> feature_ids(X.cols());
     std::iota(feature_ids.begin(), feature_ids.end(), 0);
+    std::shuffle(feature_ids.begin(), feature_ids.end(), rng);
+
+    std::size_t g;
+    if (max_features_.mode == MaxFeaturesMode::Sqrt){
+        g = static_cast<std::size_t>(std::sqrt(static_cast<double>(X.cols())));
+    }
+    else if (max_features_.mode == MaxFeaturesMode::All){
+        g = X.cols();
+    }
+    else{
+        g = max_features_.count;
+    }
 
     SplitFinder finder;
-    auto split = finder.find_best(X, y, object_ids, feature_ids, SplitCriterion::Gini, min_samples_leaf_);
+    std::optional<Split> best_split;
+    bool all_constant = true;
+    
+    for (std::size_t i = 0; i < g; i++){
+        FeatureSplitResult result = finder.find_for_feature(X, y, object_ids, feature_ids[i], SplitCriterion::Gini, min_samples_leaf_, counts);
+        if (result.is_constant == false){
+            all_constant = false;
+        }
+        if (result.best.has_value()){
+            if (!best_split.has_value() || best_split->score < result.best->score){
+                best_split = result.best;
+            }
+        }
+    }
+    if (all_constant){
+        for (std::size_t i = g; i < feature_ids.size();i++){
+            FeatureSplitResult result = finder.find_for_feature(X, y, object_ids, feature_ids[i], SplitCriterion::Gini, min_samples_leaf_, counts);
+            if (!(result.is_constant)){
+                if (result.best.has_value()){
+                    best_split = result.best;
+                }
+                all_constant = false;
+                break;
+            }
+        }
+    }
 
-    if (split == std::nullopt){
-        return make_leaf(y, object_ids);
+    if (!best_split.has_value()){
+        return make_leaf(y, object_ids, counts);
     }
 
     std::vector<std::size_t> left_ids, right_ids;
     for (std::size_t idx : object_ids){
-        if (X(idx, split->feature) <= split->threshold){
+        if (X(idx, best_split->feature) <= best_split->threshold){
             left_ids.push_back(idx);
         }
         else{
@@ -133,13 +206,13 @@ std::unique_ptr<CartClassifierNode> CartClassifier::build_node(const Matrix& X, 
     }
     auto node = std::make_unique<CartClassifierNode>();
     node->is_leaf = false;
-    node->feature = split->feature;
-    node->threshold = split->threshold;
-    node->left = build_node(X, y, left_ids, depth + 1);
-    node->right = build_node(X, y, right_ids, depth + 1);
+    node->feature = best_split->feature;
+    node->threshold = best_split->threshold;
+    node->left = build_node(X, y, left_ids, depth + 1, counts, rng);
+    node->right = build_node(X, y, right_ids, depth + 1, counts, rng);
     return node;
 }
-
+//
 Matrix CartClassifier::predict_proba(const Matrix& X) const {
     if (!fitted_){
     throw NotFitted("CartClassifer::predict_proba: model is not fitted");
@@ -148,16 +221,17 @@ Matrix CartClassifier::predict_proba(const Matrix& X) const {
 
     Matrix result;
     result.set_size(X.rows(), classes_.size());
-    result.data().reserve(X.rows() * classes_.size());
+    result.data().resize(X.rows() * classes_.size());
 
     for (std::size_t i = 0; i < X.rows(); ++i) {
         auto probs = predict_proba_one(X(i, std::nullopt));
-        for (double p : probs) {
-            result.data().push_back(p);
+        for (std::size_t j = 0; j < probs.size(); ++j) {
+            result(i, j) = probs[j];
         }
     }
     return result;
 }
+//
 std::span<const double> CartClassifier::predict_proba_one(MatrixSlice<const double> row) const{
     const CartClassifierNode* node = root_.get();
     while (!node->is_leaf) {
@@ -169,6 +243,7 @@ std::span<const double> CartClassifier::predict_proba_one(MatrixSlice<const doub
     }
     return std::span<const double>(node->probabilities.data(), node->probabilities.size());
 }
+//
 std::vector<double> CartClassifier::predict(const Matrix& X) const {
     if (!fitted_) throw NotFitted("CartClassifer::predict: model is not fitted");
     if (X.cols() != num_features_) throw FeatureCountMismatch("CartClassifier::predict: feature count mismatch");
@@ -184,6 +259,7 @@ std::vector<double> CartClassifier::predict(const Matrix& X) const {
     }
     return result;
 }
+//
 std::span<const double> CartClassifier::classes() const {
     if (!fitted_) throw NotFitted("CartClassifer::predict: model is not fitted");
     return std::span<const double>(classes_.data(), classes_.size());

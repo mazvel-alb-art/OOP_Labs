@@ -1,8 +1,10 @@
 #include "SplitFinder.hpp"
+#include "MatrixSlice.hpp"
 #include <algorithm>
 #include <limits>
 #include <map>
 #include <numeric>
+#include <unordered_map>
 
 std::optional<Split> SplitFinder::find_best(
     const Matrix& X,
@@ -10,15 +12,14 @@ std::optional<Split> SplitFinder::find_best(
     std::span<const std::size_t> object_ids,
     std::span<const std::size_t> feature_ids,
     SplitCriterion criterion,
-    std::size_t min_samples_leaf
+    std::size_t min_samples_leaf, 
+    std::span<const std::size_t> counts
 ) const {
     std::size_t n = object_ids.size();
     if (n == 0 || feature_ids.empty()) return std::nullopt;
     if (n < 2 * min_samples_leaf) return std::nullopt;
 
     if (criterion == SplitCriterion::Variance) {
-        double S_total = 0.0;
-        for (std::size_t idx : object_ids) S_total += y[idx];
 
         double best_score = -std::numeric_limits<double>::infinity();
         std::size_t best_j = 0;
@@ -33,22 +34,30 @@ std::optional<Split> SplitFinder::find_best(
                 return X(a, j) < X(b, j);
             });
 
-            std::size_t m_L = 0;
-            double S_L = 0.0;
-            std::size_t m_R = n;
-            double S_R = S_total;
+            double left_sum = 0.0;
+            double right_sum = 0.0;
+
+            double left_weight = 0.0;
+            double right_weight = 0.0;
+            for (std::size_t idx : object_ids) {
+            double weight = counts.empty() ? 1.0 : static_cast<double>(counts[idx]);
+            right_weight += weight;
+            right_sum += y[idx] * weight;
+            }
 
             for (std::size_t p = 0; p < n - 1; ++p) {
-                m_L++;
-                S_L += y[order[p]];
-                m_R--;
-                S_R -= y[order[p]];
+                std::size_t idx = order[p];
+                double weight = counts.empty() ? 1.0 : static_cast<double>(counts[idx]);
+                left_weight += weight;
+                left_sum += y[idx] * weight;
+                right_weight -= weight;
+                right_sum -= y[idx] * weight;
 
                 if (X(order[p], j) == X(order[p + 1], j)) continue;
-                if (m_L < min_samples_leaf || m_R < min_samples_leaf) continue;
+                if (p + 1 < min_samples_leaf || n - p - 1 < min_samples_leaf) continue;
 
-                double score = (S_L * S_L) / static_cast<double>(m_L)
-                             + (S_R * S_R) / static_cast<double>(m_R);
+                double score = (left_sum * left_sum) / static_cast<double>(left_weight)
+                             + (right_sum * right_sum) / static_cast<double>(right_weight);
 
                 double a = X(order[p], j);
                 double b = X(order[p + 1], j);
@@ -66,11 +75,9 @@ std::optional<Split> SplitFinder::find_best(
     else {
         // Классификация
         std::map<double, std::size_t> class_map;
-        std::vector<double> class_value;
         for (std::size_t idx : object_ids) {
             if (class_map.find(y[idx]) == class_map.end()) {
                 class_map[y[idx]] = class_map.size();
-                class_value.push_back(y[idx]);
             }
         }
         std::size_t k = class_map.size();
@@ -83,11 +90,13 @@ std::optional<Split> SplitFinder::find_best(
 
         std::vector<std::size_t> counts_total(k, 0);
         for (std::size_t idx : object_ids) {
-            counts_total[class_of_global[idx]]++;
+            std::size_t w = counts.empty() ? 1 : counts[idx];
+            counts_total[class_of_global[idx]] += w;
         }
-        std::size_t A_total = 0;
+        double A_total = 0;
         for (std::size_t i = 0; i < k; ++i) {
-            A_total += counts_total[i] * counts_total[i];
+            double c = static_cast<double>(counts_total[i]);
+            A_total += c * c;
         }
 
         double best_score = -std::numeric_limits<double>::infinity();
@@ -105,31 +114,41 @@ std::optional<Split> SplitFinder::find_best(
 
             std::vector<std::size_t> counts_L(k, 0);
             std::vector<std::size_t> counts_R = counts_total;
-            std::size_t A_L = 0;
-            std::size_t A_R = A_total;
-            std::size_t m_L = 0;
-            std::size_t m_R = n;
+            double A_L = 0;
+            double A_R = A_total;
+            std::size_t W_L = 0;
+            std::size_t W_R = 0;
+
+            for (std::size_t idx : object_ids) {
+            W_R += counts.empty() ? 1 : counts[idx];
+}
 
             for (std::size_t p = 0; p < n - 1; ++p) {
-                std::size_t c = class_of_global[order[p]];
+                std::size_t idx = order[p];
+                std::size_t c = class_of_global[idx];
+                std::size_t w = counts.empty() ? 1 : counts[idx];
 
-                A_L += 2 * counts_L[c] + 1;
-                A_R -= 2 * counts_R[c] - 1;
-                m_L++;
-                m_R--;
-                counts_L[c]++;
-                counts_R[c]--;
+                double wd = static_cast<double>(w);
+                double a = static_cast<double>(counts_L[c]);
+                double b = static_cast<double>(counts_R[c]);
+
+                A_L += 2.0 * a * wd + wd * wd;
+                A_R += -2.0 * b * wd + wd * wd;
+
+                counts_L[c] += w;
+                counts_R[c] -= w;
+                W_L += w;
+                W_R -= w;
 
                 if (X(order[p], j) == X(order[p + 1], j)) continue;
-                if (m_L < min_samples_leaf || m_R < min_samples_leaf) continue;
+                if (p + 1 < min_samples_leaf || n - p - 1 < min_samples_leaf) continue;
 
-                double score = static_cast<double>(A_L) / static_cast<double>(m_L)
-                             + static_cast<double>(A_R) / static_cast<double>(m_R);
-
-                double a = X(order[p], j);
-                double b = X(order[p + 1], j);
-                double t = std::midpoint(a, b);
-                if (t == b) t = a;
+                double score = A_L / static_cast<double>(W_L)
+                             + A_R / static_cast<double>(W_R);
+                double a_1 = X(order[p], j);
+                double b_1 = X(order[p + 1], j);
+                double t = std::midpoint(a_1, b_1);
+                if (t == b_1) t = a_1;
 
                 if (score > best_score) {
                     best_score = score; best_j = j; best_t = t; found = true;
@@ -139,4 +158,30 @@ std::optional<Split> SplitFinder::find_best(
         if (found) return Split{best_j, best_t, best_score};
         return std::nullopt;
     }
+}
+//
+FeatureSplitResult SplitFinder::find_for_feature(
+    const Matrix& X,
+    std::span<const double> y,
+    std::span<const std::size_t> object_ids,
+    std::size_t feature_id,
+    SplitCriterion criterion,
+    std::size_t min_samples_leaf,
+    std::span<const std::size_t> counts
+) const{
+    if ( object_ids.empty()){
+        return FeatureSplitResult{false, std::nullopt};
+    }
+    bool constant = true;
+    for (std::size_t i = 0;i < object_ids.size();i++){
+        if (X(object_ids[i], feature_id) != X(object_ids[0], feature_id)){
+            constant = false;
+            break;
+        }
+    }
+    if (constant){
+        return FeatureSplitResult{true, std::nullopt};
+    }
+
+    return FeatureSplitResult{false, (find_best(X, y,object_ids, std::vector<std::size_t>(1, feature_id), criterion, min_samples_leaf, counts ))};
 }
